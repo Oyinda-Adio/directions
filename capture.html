@@ -1,134 +1,93 @@
-<?php
-// save this file as index.php (or .html if your server doesn’t need PHP)
-?>
 <!doctype html>
-<html lang="en">
+<html>
 <head>
-<meta charset="utf-8" />
-<title>Camera + GPS Test</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<style>
-  body { font-family: system-ui, Arial, sans-serif; padding: 16px; }
-  .video-wrap, .preview { max-width: 420px; margin-bottom: 12px; }
-  video { width: 100%; border-radius: 6px; background:#000; }
-  canvas { display:none; }
-  .btn { padding: 8px 12px; border-radius:6px; background:#0b63c6; color:white; border:none; cursor:pointer; margin-right: 5px; }
-  .btn.secondary { background:#666; }
-  #captured { max-width: 300px; margin-top:12px; border:1px solid #ccc; border-radius:6px; }
-  #geoInfo { margin-top:16px; font-size:0.9rem; color:#333; }
-</style>
+  <meta charset="utf-8" />
+  <title>Accurate GPS Location</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, Arial; padding: 16px; }
+    #status { margin-top: 12px; font-size: 0.95rem; color: #333; white-space: pre-line; }
+    button { margin-top: 10px; padding: 8px 14px; border: none; border-radius: 6px; background: #0b63c6; color: white; cursor: pointer; }
+    button.secondary { background: #666; }
+  </style>
 </head>
 <body>
-  <h2>📸 Camera + 📍 GPS Test</h2>
-  <p>Click "Start Camera", then "Capture". Your location will be displayed below.</p>
-
-  <div class="video-wrap">
-    <video id="video" autoplay playsinline></video>
-  </div>
-  <div>
-    <button id="startBtn" class="btn">Start Camera</button>
-    <button id="captureBtn" class="btn secondary" disabled>Capture</button>
-    <button id="stopBtn" class="btn secondary" disabled>Stop Camera</button>
-  </div>
-
-  <canvas id="canvas"></canvas>
-  <img id="captured" src="" alt="Captured preview will show here" />
-
-  <div id="geoInfo">Waiting for GPS...</div>
+  <h2>📍 GPS Location with Accuracy</h2>
+  <button id="getLoc">Start Location</button>
+  <button id="saveLoc" class="secondary" disabled>Save Location</button>
+  <div id="status">Waiting...</div>
 
 <script>
-(() => {
-  const video = document.getElementById("video");
-  const canvas = document.getElementById("canvas");
-  const captured = document.getElementById("captured");
-  const startBtn = document.getElementById("startBtn");
-  const stopBtn = document.getElementById("stopBtn");
-  const captureBtn = document.getElementById("captureBtn");
-  const geoInfo = document.getElementById("geoInfo");
+let watchId = null;
+let currentPosition = null;
+let hasSaved = false;
 
-  let stream = null;
+const status = document.getElementById("status");
+const getLocBtn = document.getElementById("getLoc");
+const saveLocBtn = document.getElementById("saveLoc");
 
-  async function startCamera() {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false
-      });
-      video.srcObject = stream;
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      captureBtn.disabled = false;
-    } catch (err) {
-      alert("Camera error: " + err.message);
-    }
-  }
-
-  function stopCamera() {
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      video.srcObject = null;
-      stream = null;
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      captureBtn.disabled = true;
-    }
-  }
-
-  function captureImage() {
-    if (!stream) return;
-    const w = video.videoWidth;
-    const h = video.videoHeight;
-    if (!w || !h) {
-      alert("Video not ready yet");
-      return;
-    }
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, w, h);
-    captured.src = canvas.toDataURL("image/jpeg", 0.85);
-  }
-
-  startBtn.addEventListener("click", startCamera);
-  stopBtn.addEventListener("click", stopCamera);
-  captureBtn.addEventListener("click", captureImage);
-
-  // 📍 Capture location once page loads
- function captureLocation() {
+function startWatching() {
   if (!navigator.geolocation) {
-    geoInfo.textContent = "Geolocation not supported.";
+    status.textContent = "❌ Geolocation not supported by this browser.";
     return;
   }
 
-  geoInfo.textContent = "Getting location...";
+  status.textContent = "⏳ Getting GPS fix...";
 
-  const watchId = navigator.geolocation.watchPosition(
-    async (pos) => {
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
       const { latitude, longitude, accuracy } = pos.coords;
-      let locationName = "";
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
-        const data = await res.json();
-        locationName = data.display_name || "";
-      } catch(e) {
-        locationName = "(reverse geocoding failed)";
+      currentPosition = { latitude, longitude, accuracy };
+
+      // Show live updates
+      status.textContent = `Lat: ${latitude}\nLon: ${longitude}\nAccuracy: ±${accuracy}m`;
+
+      if (accuracy <= 50) {
+        status.textContent += "\n✅ High accuracy fix obtained!";
+      } else {
+        status.textContent += "\n⚠️ Accuracy not great. Please wait 1–2 minutes for better results.";
       }
 
-      geoInfo.textContent =
-        `Lat: ${latitude}, Lon: ${longitude}, ±${accuracy}m ${locationName ? "— " + locationName : ""}`;
-
-      // once we get a valid fix, stop watching to save battery
-      navigator.geolocation.clearWatch(watchId);
+      // Enable Save button always
+      saveLocBtn.disabled = false;
     },
     (err) => {
-      geoInfo.textContent = "Geolocation error: " + err.message;
+      status.textContent = "⚠️ Error: " + err.message;
     },
-    { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+    {
+      enableHighAccuracy: true,
+      timeout: 30000,
+      maximumAge: 0
+    }
   );
 }
 
-  captureLocation();
-})();
+function stopWatching() {
+  if (watchId) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+}
+
+getLocBtn.addEventListener("click", () => {
+  stopWatching();
+  startWatching();
+  getLocBtn.disabled = true;
+});
+
+saveLocBtn.addEventListener("click", () => {
+  if (!currentPosition) {
+    alert("No location yet!");
+    return;
+  }
+
+  alert(`📍 Location saved:\nLat: ${currentPosition.latitude}\nLon: ${currentPosition.longitude}\nAccuracy: ±${currentPosition.accuracy}m`);
+
+  hasSaved = true;
+  saveLocBtn.textContent = "Update Location";
+  getLocBtn.disabled = false; // allow restarting scan
+  stopWatching();
+});
 </script>
 </body>
 </html>
