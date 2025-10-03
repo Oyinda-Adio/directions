@@ -1,11 +1,8 @@
-<?php
-// save this file as index.php (or .html if your server doesn’t need PHP)
-?>
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Camera + GPS Test</title>
+<title>Camera + GPS Test (Mozilla API)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body { font-family: system-ui, Arial, sans-serif; padding: 16px; }
@@ -19,8 +16,8 @@
 </style>
 </head>
 <body>
-  <h2>📸 Camera + 📍 GPS Test</h2>
-  <p>Click "Start Camera", then "Capture". Your location will be displayed below (only if accuracy ≤ 50m).</p>
+  <h2>📸 Camera + 📍 Mozilla Geolocation Test</h2>
+  <p>Click "Start Camera", then "Capture". Location will be shown below (Mozilla API first, fallback to GPS).</p>
 
   <div class="video-wrap">
     <video id="video" autoplay playsinline></video>
@@ -34,7 +31,7 @@
   <canvas id="canvas"></canvas>
   <img id="captured" src="" alt="Captured preview will show here" />
 
-  <div id="geoInfo">Waiting for GPS...</div>
+  <div id="geoInfo">Waiting for location...</div>
 
 <script>
 (() => {
@@ -93,48 +90,71 @@
   stopBtn.addEventListener("click", stopCamera);
   captureBtn.addEventListener("click", captureImage);
 
-  // 📍 Capture location once page loads
-  function captureLocation() {
+  // 📍 First try Mozilla Location Service API
+  async function mozillaGeolocation() {
+    geoInfo.textContent = "Getting fast location via Mozilla Location Service...";
+
+    try {
+      const res = await fetch("https://location.services.mozilla.com/v1/geolocate?key=test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}) // empty body = IP-based lookup
+      });
+
+      const data = await res.json();
+
+      if (data.location) {
+        const lat = data.location.lat;
+        const lon = data.location.lng;
+        const accuracy = data.accuracy;
+
+        if (accuracy <= 50) {
+          geoInfo.textContent = `✅ Mozilla API: Lat ${lat}, Lon ${lon}, ±${accuracy}m`;
+          return true;
+        } else {
+          geoInfo.textContent = `Mozilla API gave low accuracy (±${accuracy}m), trying GPS...`;
+          return false;
+        }
+      } else {
+        geoInfo.textContent = "Mozilla API failed, falling back to GPS.";
+        return false;
+      }
+    } catch (err) {
+      geoInfo.textContent = "Mozilla API error: " + err.message + ". Falling back to GPS.";
+      return false;
+    }
+  }
+
+  // 📍 Fallback to navigator.geolocation (GPS)
+  function browserGeolocation() {
     if (!navigator.geolocation) {
       geoInfo.textContent = "Geolocation not supported.";
       return;
     }
 
-    geoInfo.textContent = "Getting location... Please enable GPS for better accuracy.";
-
     const watchId = navigator.geolocation.watchPosition(
-      async (pos) => {
+      (pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
-
         if (accuracy > 50) {
-          geoInfo.textContent = `Accuracy too low (±${accuracy}m). Waiting for GPS fix...`;
-          return; // keep watching until better
+          geoInfo.textContent = `GPS accuracy too low (±${accuracy}m)...`;
+          return;
         }
-
-        // Accuracy is good enough
-        let locationName = "";
-        try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
-          const data = await res.json();
-          locationName = data.display_name || "";
-        } catch(e) {
-          locationName = "(reverse geocoding failed)";
-        }
-
-        geoInfo.textContent =
-          `Lat: ${latitude}, Lon: ${longitude}, ±${accuracy}m ${locationName ? "— " + locationName : ""}`;
-
-        // stop watching once accurate location is obtained
+        geoInfo.textContent = `📡 GPS: Lat ${latitude}, Lon ${longitude}, ±${accuracy}m`;
         navigator.geolocation.clearWatch(watchId);
       },
       (err) => {
-        geoInfo.textContent = "Geolocation error: " + err.message;
+        geoInfo.textContent = "GPS error: " + err.message;
       },
       { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
     );
   }
 
-  captureLocation();
+  // Run both: Mozilla API first, then fallback to GPS
+  (async () => {
+    const ok = await mozillaGeolocation();
+    if (!ok) browserGeolocation();
+  })();
+
 })();
 </script>
 </body>
