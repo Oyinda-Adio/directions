@@ -36,71 +36,33 @@
   <button id="saveBtn" class="btn" disabled>Save Location</button>
   <div id="saveMsg"></div>
 
-  
   <script>
 (() => {
-  const video = document.getElementById("video");
-  const canvas = document.getElementById("canvas");
-  const captured = document.getElementById("captured");
-  const startBtn = document.getElementById("startBtn");
-  const stopBtn = document.getElementById("stopBtn");
-  const captureBtn = document.getElementById("captureBtn");
   const geoInfo = document.getElementById("geoInfo");
   const saveBtn = document.getElementById("saveBtn");
   const saveMsg = document.getElementById("saveMsg");
 
-  let stream = null;
   let watchId = null;
   let latestLocation = null;
   let savedOnce = false;
 
-  // ----- Camera handling -----
-  async function startCamera() {
+  async function reverseGeocode(lat, lon) {
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false
-      });
-      video.srcObject = stream;
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      captureBtn.disabled = false;
-    } catch (err) {
-      alert("Camera error: " + err.message);
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      const data = await res.json();
+      return data.display_name || "Unknown address";
+    } catch {
+      return "Address lookup failed";
     }
   }
 
-  function stopCamera() {
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      video.srcObject = null;
-      stream = null;
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      captureBtn.disabled = true;
+  function stopScanning() {
+    if (watchId) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
     }
   }
 
-  function captureImage() {
-    if (!stream) return;
-    const w = video.videoWidth;
-    const h = video.videoHeight;
-    if (!w || !h) {
-      alert("Video not ready yet");
-      return;
-    }
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, w, h);
-    captured.src = canvas.toDataURL("image/jpeg", 0.85);
-  }
-
-  startBtn.addEventListener("click", startCamera);
-  stopBtn.addEventListener("click", stopCamera);
-  captureBtn.addEventListener("click", captureImage);
-
-  // ----- Location handling -----
   function startLocationWatch() {
     if (!navigator.geolocation) {
       geoInfo.textContent = "❌ Geolocation not supported.";
@@ -108,32 +70,36 @@
     }
 
     geoInfo.textContent = "⏳ Getting location... please enable GPS.";
-    saveBtn.disabled = true;
+    saveBtn.style.display = "none";
     saveMsg.textContent = "";
 
-    if (watchId) navigator.geolocation.clearWatch(watchId);
+    if (watchId) stopScanning();
 
     watchId = navigator.geolocation.watchPosition(
-      (pos) => {
+      async (pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
         latestLocation = { latitude, longitude, accuracy };
 
+        const address = await reverseGeocode(latitude, longitude);
+
         if (accuracy > 50) {
-          geoInfo.textContent = `⚠️ Lat: ${latitude}, Lon: ${longitude}, Accuracy: ±${accuracy}m.  
-          Location not very accurate, allow 1–2 minutes for better fix...`;
-          saveBtn.disabled = false;
+          geoInfo.innerHTML = `⚠️ Lat: ${latitude.toFixed(6)}, Lon: ${longitude.toFixed(6)}<br>
+            Accuracy: ±${accuracy}m<br>
+            Address: ${address}<br>
+            <b>Accuracy too low</b> — allow a few minutes for better fix or Save Current Location and update later.`;
+
+          saveBtn.style.display = "inline-block";
           saveBtn.textContent = savedOnce ? "Update Location" : "Save Location";
         } else {
-          geoInfo.textContent = `✅ Lat: ${latitude}, Lon: ${longitude}, Accuracy: ±${accuracy}m`;
-          saveBtn.disabled = false;
-          saveBtn.textContent = savedOnce ? "Update Location" : "Save Location";
+          geoInfo.innerHTML = `✅ Lat: ${latitude.toFixed(6)}, Lon: ${longitude.toFixed(6)}<br>
+            Accuracy: ±${accuracy}m<br>
+            Address: ${address}`;
 
-          // --- Auto-save on first good accuracy ---
           if (!savedOnce) {
             saveMsg.textContent = `📍 Auto-saved: Lat ${latitude}, Lon ${longitude}, ±${accuracy}m ✅`;
             savedOnce = true;
-            saveBtn.textContent = "Update Location";
-            navigator.geolocation.clearWatch(watchId); // stop watching after auto-save
+            stopScanning();
+            saveBtn.style.display = "none"; // hide button
           }
         }
       },
@@ -152,18 +118,11 @@
     }
 
     const { latitude, longitude, accuracy } = latestLocation;
-    saveMsg.textContent = `📍 Location saved: Lat ${latitude}, Lon ${longitude}, ±${accuracy}m`;
-
-    if (accuracy > 50) {
-      saveMsg.textContent += " ⚠️ Accuracy is low, try again after a few minutes.";
-      saveBtn.textContent = "Update Location";
-    } else {
-      saveMsg.textContent += " ✅ High accuracy accepted.";
-      saveBtn.textContent = "Update Location";
-    }
+    saveMsg.textContent = `📍 Location saved manually: Lat ${latitude}, Lon ${longitude}, ±${accuracy}m`;
 
     savedOnce = true;
-    startLocationWatch(); // restart watching if user updates
+    stopScanning();
+    saveBtn.textContent = "Update Location";
   });
 
   // start scanning immediately on load
