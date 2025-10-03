@@ -36,7 +36,8 @@
   <button id="saveBtn" class="btn" disabled>Save Location</button>
   <div id="saveMsg"></div>
 
-<script>
+  
+  <script>
 (() => {
   const video = document.getElementById("video");
   const canvas = document.getElementById("canvas");
@@ -113,17 +114,27 @@
     if (watchId) navigator.geolocation.clearWatch(watchId);
 
     watchId = navigator.geolocation.watchPosition(
-      async (pos) => {
+      (pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
         latestLocation = { latitude, longitude, accuracy };
 
         if (accuracy > 50) {
           geoInfo.textContent = `⚠️ Lat: ${latitude}, Lon: ${longitude}, Accuracy: ±${accuracy}m.  
           Location not very accurate, allow 1–2 minutes for better fix...`;
-          saveBtn.disabled = false; // still allow save
+          saveBtn.disabled = false;
+          saveBtn.textContent = savedOnce ? "Update Location" : "Save Location";
         } else {
           geoInfo.textContent = `✅ Lat: ${latitude}, Lon: ${longitude}, Accuracy: ±${accuracy}m`;
           saveBtn.disabled = false;
+          saveBtn.textContent = savedOnce ? "Update Location" : "Save Location";
+
+          // --- Auto-save on first good accuracy ---
+          if (!savedOnce) {
+            saveMsg.textContent = `📍 Auto-saved: Lat ${latitude}, Lon ${longitude}, ±${accuracy}m ✅`;
+            savedOnce = true;
+            saveBtn.textContent = "Update Location";
+            navigator.geolocation.clearWatch(watchId); // stop watching after auto-save
+          }
         }
       },
       (err) => {
@@ -133,7 +144,7 @@
     );
   }
 
-  // Save or update button
+  // Save / Update manually
   saveBtn.addEventListener("click", () => {
     if (!latestLocation) {
       saveMsg.textContent = "❌ No location available yet.";
@@ -145,20 +156,17 @@
 
     if (accuracy > 50) {
       saveMsg.textContent += " ⚠️ Accuracy is low, try again after a few minutes.";
-    }
-
-    if (!savedOnce) {
       saveBtn.textContent = "Update Location";
-      savedOnce = true;
+    } else {
+      saveMsg.textContent += " ✅ High accuracy accepted.";
+      saveBtn.textContent = "Update Location";
     }
 
-    // If user wants to update again, restart scanning
-    startLocationWatch();
+    savedOnce = true;
+    startLocationWatch(); // restart watching if user updates
   });
 
   // start scanning immediately on load
   startLocationWatch();
 })();
 </script>
-</body>
-</html>
