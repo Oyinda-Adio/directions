@@ -33,7 +33,7 @@
   <img id="captured" src="" alt="Captured preview will show here" />
 
   <div id="geoInfo">Waiting for GPS...</div>
-  <button id="saveBtn" class="btn" disabled>Save Location</button>
+  <button id="saveBtn" class="btn">Save Location</button>
   <div id="saveMsg"></div>
 
   <script>
@@ -70,7 +70,6 @@
     }
 
     geoInfo.textContent = "⏳ Getting location... please enable GPS.";
-    saveBtn.style.display = "inline-block";
     saveMsg.textContent = "";
 
     if (watchId) stopScanning();
@@ -82,25 +81,15 @@
 
         const address = await reverseGeocode(latitude, longitude);
 
-        if (accuracy > 50) {
-          geoInfo.innerHTML = `⚠️ Lat: ${latitude.toFixed(6)}, Lon: ${longitude.toFixed(6)}<br>
-            Accuracy: ±${accuracy}m<br>
-            Address: ${address}<br>
-            <b>Accuracy too low</b> — allow a few minutes for better fix or Save Current Location and update later.`;
+        geoInfo.innerHTML = `${accuracy > 50 ? "⚠️" : "✅"} Lat: ${latitude.toFixed(6)}, Lon: ${longitude.toFixed(6)}<br>
+          Accuracy: ±${accuracy}m<br>
+          Address: ${address}${accuracy > 50 ? "<br><b>Accuracy too low</b> — allow a few minutes for better fix or Save Current Location and update later." : ""}`;
 
-          saveBtn.style.display = "inline-block";
-          saveBtn.textContent = savedOnce ? "Update Location" : "Save Location";
-        } else {
-          geoInfo.innerHTML = `✅ Lat: ${latitude.toFixed(6)}, Lon: ${longitude.toFixed(6)}<br>
-            Accuracy: ±${accuracy}m<br>
-            Address: ${address}`;
-
-          if (!savedOnce) {
-            saveMsg.textContent = `📍 Auto-saved: Lat ${latitude}, Lon ${longitude}, ±${accuracy}m ✅`;
-            savedOnce = true;
-            stopScanning();
-            saveBtn.style.display = "none"; // hide button
-          }
+        if (!savedOnce && accuracy <= 50) {
+          saveMsg.textContent = `📍 Auto-saved: Lat ${latitude}, Lon ${longitude}, ±${accuracy}m ✅`;
+          savedOnce = true;
+          stopScanning();
+          saveBtn.textContent = "Update Location";
         }
       },
       (err) => {
@@ -111,30 +100,31 @@
   }
 
   // Save / Update manually
- saveBtn.addEventListener("click", () => {
-  if (!latestLocation) {
-    saveMsg.textContent = "❌ No location available yet.";
-    return;
-  }
+  saveBtn.addEventListener("click", () => {
+    if (!latestLocation) {
+      saveMsg.textContent = "❌ No location available yet.";
+      return;
+    }
 
-  const { latitude, longitude, accuracy } = latestLocation;
-  saveMsg.textContent = `📍 Location saved: Lat ${latitude}, Lon ${longitude}, ±${accuracy}m`;
+    const { latitude, longitude, accuracy } = latestLocation;
+    saveMsg.textContent = `📍 Location saved: Lat ${latitude}, Lon ${longitude}, ±${accuracy}m`;
 
-  if (!savedOnce) {
-    // First save → stop scanning
-    savedOnce = true;
-    stopScanning();
-    saveBtn.textContent = "Update Location";
-  } else {
-    // Update → restart scanning
-    startLocationWatch();
-    saveBtn.textContent = "Save Location";
-    savedOnce = false;
-  }
-});
-
+    if (!savedOnce) {
+      // First save → stop scanning
+      savedOnce = true;
+      stopScanning();
+      saveBtn.textContent = "Update Location";
+    } else {
+      // Update → restart scanning
+      savedOnce = false;
+      startLocationWatch();
+      saveBtn.textContent = "Save Location";
+    }
+  });
 
   // start scanning immediately on load
   startLocationWatch();
 })();
 </script>
+</body>
+</html>
