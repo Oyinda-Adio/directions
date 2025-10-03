@@ -38,6 +38,51 @@
 
   <script>
 (() => {
+
+    // --- Camera Elements ---
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+  const captured = document.getElementById("captured");
+  const startBtn = document.getElementById("startBtn");
+  const captureBtn = document.getElementById("captureBtn");
+  const stopBtn = document.getElementById("stopBtn");
+
+  let stream = null;
+
+  startBtn.addEventListener("click", async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      captureBtn.disabled = false;
+      stopBtn.disabled = false;
+      startBtn.disabled = true;
+    } catch (err) {
+      alert("Camera error: " + err.message);
+    }
+  });
+
+  captureBtn.addEventListener("click", () => {
+    if (!stream) return;
+    const ctx = canvas.getContext("2d");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+    captured.src = canvas.toDataURL("image/png");
+  });
+
+  stopBtn.addEventListener("click", () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      stream = null;
+    }
+    video.srcObject = null;
+    startBtn.disabled = false;
+    captureBtn.disabled = true;
+    stopBtn.disabled = true;
+  });
+  
+
+  // --- GPS Elements ---
   const geoInfo = document.getElementById("geoInfo");
   const saveBtn = document.getElementById("saveBtn");
   const saveMsg = document.getElementById("saveMsg");
