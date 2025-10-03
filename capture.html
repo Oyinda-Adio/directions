@@ -20,7 +20,7 @@
 </head>
 <body>
   <h2>📸 Camera + 📍 GPS Test</h2>
-  <p>Click "Start Camera", then "Capture". Your location will be displayed below.</p>
+  <p>Click "Start Camera", then "Capture". Your location will be displayed below (only if accuracy ≤ 50m).</p>
 
   <div class="video-wrap">
     <video id="video" autoplay playsinline></video>
@@ -94,38 +94,45 @@
   captureBtn.addEventListener("click", captureImage);
 
   // 📍 Capture location once page loads
- function captureLocation() {
-  if (!navigator.geolocation) {
-    geoInfo.textContent = "Geolocation not supported.";
-    return;
+  function captureLocation() {
+    if (!navigator.geolocation) {
+      geoInfo.textContent = "Geolocation not supported.";
+      return;
+    }
+
+    geoInfo.textContent = "Getting location... Please enable GPS for better accuracy.";
+
+    const watchId = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+
+        if (accuracy > 50) {
+          geoInfo.textContent = `Accuracy too low (±${accuracy}m). Waiting for GPS fix...`;
+          return; // keep watching until better
+        }
+
+        // Accuracy is good enough
+        let locationName = "";
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+          const data = await res.json();
+          locationName = data.display_name || "";
+        } catch(e) {
+          locationName = "(reverse geocoding failed)";
+        }
+
+        geoInfo.textContent =
+          `Lat: ${latitude}, Lon: ${longitude}, ±${accuracy}m ${locationName ? "— " + locationName : ""}`;
+
+        // stop watching once accurate location is obtained
+        navigator.geolocation.clearWatch(watchId);
+      },
+      (err) => {
+        geoInfo.textContent = "Geolocation error: " + err.message;
+      },
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+    );
   }
-
-  geoInfo.textContent = "Getting location...";
-
-  const watchId = navigator.geolocation.watchPosition(
-    async (pos) => {
-      const { latitude, longitude, accuracy } = pos.coords;
-      let locationName = "";
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
-        const data = await res.json();
-        locationName = data.display_name || "";
-      } catch(e) {
-        locationName = "(reverse geocoding failed)";
-      }
-
-      geoInfo.textContent =
-        `Lat: ${latitude}, Lon: ${longitude}, ±${accuracy}m ${locationName ? "— " + locationName : ""}`;
-
-      // once we get a valid fix, stop watching to save battery
-      navigator.geolocation.clearWatch(watchId);
-    },
-    (err) => {
-      geoInfo.textContent = "Geolocation error: " + err.message;
-    },
-    { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
-  );
-}
 
   captureLocation();
 })();
