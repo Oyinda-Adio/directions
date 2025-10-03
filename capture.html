@@ -70,7 +70,7 @@
     }
 
     geoInfo.textContent = "⏳ Getting location... please enable GPS.";
-    saveBtn.style.display = "none";
+    saveBtn.style.display = "inline-block";
     saveMsg.textContent = "";
 
     if (watchId) stopScanning();
@@ -111,19 +111,28 @@
   }
 
   // Save / Update manually
-  saveBtn.addEventListener("click", () => {
-    if (!latestLocation) {
-      saveMsg.textContent = "❌ No location available yet.";
-      return;
-    }
+ saveBtn.addEventListener("click", () => {
+  if (!latestLocation) {
+    saveMsg.textContent = "❌ No location available yet.";
+    return;
+  }
 
-    const { latitude, longitude, accuracy } = latestLocation;
-    saveMsg.textContent = `📍 Location saved manually: Lat ${latitude}, Lon ${longitude}, ±${accuracy}m`;
+  const { latitude, longitude, accuracy } = latestLocation;
+  saveMsg.textContent = `📍 Location saved: Lat ${latitude}, Lon ${longitude}, ±${accuracy}m`;
 
+  if (!savedOnce) {
+    // First save → stop scanning
     savedOnce = true;
     stopScanning();
     saveBtn.textContent = "Update Location";
-  });
+  } else {
+    // Update → restart scanning
+    startLocationWatch();
+    saveBtn.textContent = "Save Location";
+    savedOnce = false;
+  }
+});
+
 
   // start scanning immediately on load
   startLocationWatch();
